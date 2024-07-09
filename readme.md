@@ -14,6 +14,7 @@ cargo run
 ## Supported services
 - HTTP
 - HTTPS
+- Websocket (ws) and Secure Websocket (wss)
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) file for details
