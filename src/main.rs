@@ -18,7 +18,8 @@ async fn main() -> std::io::Result<()> {
     let http_listener = tokio::spawn(http::listener(BIND_ADDRESS, 80));
     let https_listener = tokio::spawn(https::listener(BIND_ADDRESS, 443));
 
-    let _ = http_listener.await.expect("https_listener failed");
+    let _ = http_listener.await.expect("http_listener failed");
     _ = https_listener.await.expect("https_listener failed");
+    
     Ok(())
 }
