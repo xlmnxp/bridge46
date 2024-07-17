@@ -45,8 +45,7 @@ pub async fn handle_connection(client: TcpStream, port: u16) {
 
     let mut buf = [0; 1024];
     client.peek(&mut buf).await.expect("peek failed");
-    let sni: Option<String> = get_sni_from_packet(&buf);
-    if let Some(sni_string) = sni {
+    if let Some(sni_string) = get_sni_from_packet(&buf) {
         if let Ok(ip) = resolve_addr(&sni_string).await {
             log::info!("HTTPS {} Choose AAAA record for {}: {}", src_addr, sni_string, ip);
 
@@ -73,13 +72,11 @@ pub async fn handle_connection(client: TcpStream, port: u16) {
 pub async fn listener(bind_address: &str, port: u16) -> std::io::Result<()> {
     let listener: TcpListener = TcpListener::bind(format!("{}:{}", bind_address, port)).await.unwrap();
     log::info!("Listening on {}", listener.local_addr().unwrap());
-    let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
     loop {
         let (client, _) = listener.accept().await.unwrap();
-        let handle: tokio::task::JoinHandle<()> = tokio::spawn(async move {
+        tokio::spawn(async move {
             handle_connection(client, port).await;
         });
-        handles.push(handle);
     }
 }

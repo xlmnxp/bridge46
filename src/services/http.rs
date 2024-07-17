@@ -36,13 +36,11 @@ async fn handle_connection(client: TcpStream, port: u16) {
 pub async fn listener(bind_address: &str, port: u16) -> std::io::Result<()> {
     let listener: TcpListener = TcpListener::bind(format!("{}:{}", bind_address, port)).await.unwrap();
     log::info!("Listening on {}", listener.local_addr().unwrap());
-    let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
     loop {
         let (client, _) = listener.accept().await.unwrap();
-        let handle: tokio::task::JoinHandle<()> = tokio::spawn(async move {
+        tokio::spawn(async move {
             handle_connection(client, port).await;
         });
-        handles.push(handle);
     }
 }
