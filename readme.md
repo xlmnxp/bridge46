@@ -20,7 +20,7 @@ docker pull xlmnxp/bridge46:latest
 ```
 2. Run the image
 ```bash
-docker run -d -p 80:80 -p 443:443 xlmnxp/bridge46:latest
+docker run -d -p 80:80 -p 443:443 --name bridge46 xlmnxp/bridge46:latest
 ```
 3. Add A record of IPv4 of the server to your DNS records (make sure you have IPv6 AAAA record too)
 
