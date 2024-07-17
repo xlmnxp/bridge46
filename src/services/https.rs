@@ -5,33 +5,26 @@ use tls_parser::{parse_tls_extensions, parse_tls_plaintext};
 use crate::utils::resolve_addr;
 
 pub fn get_sni_from_packet(packet: &[u8]) -> Option<String> {
-    let res: Result<
-        (&[u8], tls_parser::TlsPlaintext),
-        tls_parser::Err<tls_parser::nom::error::Error<&[u8]>>,
-    > = parse_tls_plaintext(&packet);
-    if res.is_err() {
+    let parse_tls_plaintext = parse_tls_plaintext(&packet);
+    if parse_tls_plaintext.is_err() {
+        log::error!("Error parsing TLS packet: {:?}", parse_tls_plaintext.err());
         return None;
     }
-    let tls_message: &tls_parser::TlsMessage = &res.unwrap().1.msg[0];
+
+    let tls_message = &parse_tls_plaintext.ok()?.1.msg[0];
     if let tls_parser::TlsMessage::Handshake(handshake) = tls_message {
         if let tls_parser::TlsMessageHandshake::ClientHello(client_hello) = handshake {
-            // get the extensions
-            let extensions: &[u8] = client_hello.ext.unwrap();
-            // parse the extensions
-            let res: Result<
-                (&[u8], Vec<tls_parser::TlsExtension>),
-                tls_parser::Err<tls_parser::nom::error::Error<&[u8]>>,
-            > = parse_tls_extensions(extensions);
-            // iterate over the extensions and find the SNI
-            for extension in res.unwrap().1 {
+            let extensions: &[u8] = client_hello.ext?;
+            let parsed_extensions = parse_tls_extensions(extensions).ok()?;
+            for extension in parsed_extensions.1 {
                 if let tls_parser::TlsExtension::SNI(sni) = extension {
-                    // get the hostname
-                    let hostname: &[u8] = sni[0].1;
-                    let s: String = match String::from_utf8(hostname.to_vec()) {
-                        Ok(v) => v,
-                        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+                    return match String::from_utf8(sni[0].1.to_vec()) {
+                        Ok(sni) => Some(sni),
+                        Err(err) => {
+                            log::error!("Error parsing SNI: {:?}", err);
+                            None
+                        },
                     };
-                    return Some(s);
                 }
             }
         }
@@ -43,7 +36,7 @@ pub fn get_sni_from_packet(packet: &[u8]) -> Option<String> {
 pub async fn handle_connection(client: TcpStream, port: u16) {
     let src_addr = client.peer_addr().unwrap();
 
-    let mut buf = [0; 1024];
+    let mut buf = [0; 2048];
     client.peek(&mut buf).await.expect("peek failed");
     if let Some(sni_string) = get_sni_from_packet(&buf) {
         if let Ok(ip) = resolve_addr(&sni_string).await {
