@@ -32,21 +32,6 @@ pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
         ));
     }
 
-    log::info!(
-        "DNS Resolver: {} Has AAAA Records: {}",
-        addr,
-        answers_ipv6
-            .iter()
-            .map(|r| r
-                .data()
-                .expect("Cannot process IP Data")
-                .ip_addr()
-                .expect("Invalid IP address")
-                .to_string())
-            .collect::<Vec<String>>()
-            .join(", ")
-    );
-
     // check if DNS has A/AAAA record pointed to Bridge46 IPv4/IPv6 address
     let bridge_ipv4 = get_bridge46_ipv4();
     let bridge_ipv6 = get_bridge46_ipv6();
@@ -76,6 +61,21 @@ pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
             ));
         }
     }
+
+    log::info!(
+        "DNS Resolver: {} Has AAAA Records: {}",
+        addr,
+        answers_ipv6
+            .iter()
+            .map(|r| r
+                .data()
+                .expect("Cannot process IP Data")
+                .ip_addr()
+                .expect("Invalid IP address")
+                .to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
 
     for answer in answers_ipv6 {
         if let Some(RData::AAAA(ref ip)) = answer.data() {

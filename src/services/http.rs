@@ -15,7 +15,8 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
         .find(|line| line.starts_with("Host: "))
         .map(|line| line.trim_start_matches("Host: ").trim());
     if let Some(host_string) = host {
-        if let Ok(ip) = resolve_addr(host_string).await {
+        let resolved_address: Result<std::net::IpAddr, io::Error> = resolve_addr(&host_string).await;
+        if let Ok(ip) = resolved_address {
             log::info!(
                 "HTTP {} Choose AAAA record for {}: {}",
                 src_addr,
@@ -45,6 +46,13 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
             tokio::spawn(async move { io::copy(&mut eread, &mut owrite).await });
             tokio::spawn(async move { io::copy(&mut oread, &mut ewrite).await });
             return Some(());
+        } else {
+            log::error!(
+                "HTTPS {} Failed to resolve AAAA record for {}: {}",
+                src_addr,
+                host_string,
+                resolved_address.err()?
+            );
         }
     }
     None

@@ -38,7 +38,8 @@ pub async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
     let mut buf = [0; 2048];
     client.peek(&mut buf).await.expect("peek failed");
     if let Some(sni_string) = get_sni_from_packet(&buf) {
-        if let Ok(ip) = resolve_addr(&sni_string).await {
+        let resolved_address: Result<std::net::IpAddr, io::Error> = resolve_addr(&sni_string).await;
+        if let Ok(ip) = resolved_address {
             log::info!(
                 "HTTPS {} Choose AAAA record for {}: {}",
                 src_addr,
@@ -68,6 +69,13 @@ pub async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
             tokio::spawn(async move { io::copy(&mut eread, &mut owrite).await });
             tokio::spawn(async move { io::copy(&mut oread, &mut ewrite).await });
             return Some(());
+        } else {
+            log::error!(
+                "HTTPS {} Failed to resolve AAAA record for {}: {}",
+                src_addr,
+                sni_string,
+                resolved_address.err()?
+            );
         }
     } else {
         log::error!("HTTPS {} No SNI", src_addr);
