@@ -8,11 +8,9 @@ use std::net::IpAddr;
 use std::str::FromStr;
 use tokio::net::TcpStream;
 
-use crate::DNS_SERVER;
-
 pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
     let (stream, sender) = TcpClientStream::<AsyncIoTokioAsStd<TcpStream>>::new(
-        DNS_SERVER.parse().expect("Invalid DNS server address"),
+        get_dns_server().parse().expect("Invalid DNS server address"),
     );
     let dns_client = AsyncClient::new(stream, sender, None);
     let (mut dns_client, bg) = dns_client.await.expect("dns connection failed");
@@ -20,13 +18,14 @@ pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
     // make sure to run the background task
     tokio::spawn(bg);
 
-    let response: DnsResponse = dns_client
+    let response_ipv6: DnsResponse = dns_client
         .query(Name::from_str(addr)?, DNSClass::IN, RecordType::AAAA)
         .await
         .expect("Failed to query");
-    let answers: &[Record] = response.answers();
 
-    if answers.len() == 0 {
+    let answers_ipv6: &[Record] = response_ipv6.answers();
+
+    if answers_ipv6.len() == 0 {
         return Err(Error::new(
             std::io::ErrorKind::Other,
             "No AAAA records found",
@@ -36,7 +35,7 @@ pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
     log::info!(
         "DNS Resolver: {} Has AAAA Records: {}",
         addr,
-        answers
+        answers_ipv6
             .iter()
             .map(|r| r
                 .data()
@@ -48,15 +47,74 @@ pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
             .join(", ")
     );
 
-    if let Some(RData::AAAA(ref ip)) = answers[0].data() {
-        return Ok(ip
-            .to_string()
-            .parse::<IpAddr>()
-            .expect("Invalid IP address"));
-    } else {
-        return Err(Error::new(
-            std::io::ErrorKind::Other,
-            "No AAAA records found",
-        ));
+    // check if DNS has A/AAAA record pointed to Bridge46 IPv4/IPv6 address
+    let bridge_ipv4 = get_bridge46_ipv4();
+    let bridge_ipv6 = get_bridge46_ipv6();
+    if bridge_ipv4 != "" || bridge_ipv6 != "" {
+        let response_ipv4: DnsResponse = dns_client
+        .query(Name::from_str(addr)?, DNSClass::IN, RecordType::A)
+        .await
+        .expect("Failed to query");
+
+        let answers_ipv4: &[Record] = response_ipv4.answers();
+
+        if ![answers_ipv4, answers_ipv6].concat().iter().any(|answer| {
+            if let Some(RData::A(ref ip)) = answer.data() {
+                if ip.to_string() == bridge_ipv4 {
+                    return true;
+                }
+            } else if let Some(RData::AAAA(ref ip)) = answer.data() {
+                if ip.to_string() == bridge_ipv6 {
+                    return true;
+                }
+            }
+            false
+        }) {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                "No A/AAAA record points to IPv4/IPv6 of Bridge46 service",
+            ));
+        }
     }
+
+    for answer in answers_ipv6 {
+        if let Some(RData::AAAA(ref ip)) = answer.data() {
+            let bridge_ipv6 = get_bridge46_ipv6();
+            if bridge_ipv6 != "" && ip.to_string() == bridge_ipv6 {
+                log::info!("DNS Resolver: {} requested IPv6 is same as Bridge46 service IPv6", addr);
+                continue;
+            }
+
+            return Ok(ip
+                .to_string()
+                .parse::<IpAddr>()
+                .expect("Invalid IP address"));
+        } else {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                "No AAAA records found",
+            ));
+        }
+    }
+
+    Err(Error::new(
+        std::io::ErrorKind::Other,
+        "No AAAA records found",
+    ))
+}
+
+pub fn get_dns_server() -> String {
+    std::env::var("DNS_SERVER").unwrap_or_else(|_| "1.1.1.1:53".into())
+}
+
+pub fn get_bind_address() -> String {
+    std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "::".into())
+}
+
+pub fn get_bridge46_ipv4() -> String {
+    std::env::var("BRIDGE46_IPV4").unwrap_or_else(|_| "".into())
+}
+
+pub fn get_bridge46_ipv6() -> String {
+    std::env::var("BRIDGE46_IPV6").unwrap_or_else(|_| "".into())
 }

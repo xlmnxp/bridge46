@@ -2,7 +2,7 @@ use tls_parser::{parse_tls_extensions, parse_tls_plaintext};
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::utils::resolve_addr;
+use crate::utils::{get_bind_address, resolve_addr};
 
 pub fn get_sni_from_packet(packet: &[u8]) -> Option<String> {
     let parse_tls_plaintext = parse_tls_plaintext(&packet);
@@ -75,8 +75,8 @@ pub async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
     None
 }
 
-pub async fn listener(bind_address: &str, port: u16) -> std::io::Result<()> {
-    let listener: TcpListener = TcpListener::bind(format!("{}:{}", bind_address, port)).await?;
+pub async fn listener(port: u16) -> std::io::Result<()> {
+    let listener: TcpListener = TcpListener::bind(format!("{}:{}", get_bind_address(), port)).await?;
     log::info!("Listening on {}", listener.local_addr()?);
 
     loop {

@@ -1,7 +1,7 @@
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::utils::resolve_addr;
+use crate::utils::{get_bind_address, resolve_addr};
 
 async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
     let src_addr = client.peer_addr().ok()?;
@@ -50,8 +50,8 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
     None
 }
 
-pub async fn listener(bind_address: &str, port: u16) -> std::io::Result<()> {
-    let listener: TcpListener = TcpListener::bind(format!("{}:{}", bind_address, port)).await?;
+pub async fn listener(port: u16) -> std::io::Result<()> {
+    let listener: TcpListener = TcpListener::bind(format!("{}:{}", get_bind_address(), port)).await?;
     log::info!("Listening on {}", listener.local_addr()?);
 
     loop {
