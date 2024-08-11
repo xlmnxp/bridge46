@@ -35,56 +35,81 @@ pub fn get_sni_from_packet(packet: &[u8]) -> Option<String> {
 pub async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
     let src_addr = client.peer_addr().ok()?;
 
-    let mut buf = [0; 2048];
+    let mut buf = [0; 256];
     client.peek(&mut buf).await.expect("peek failed");
-    if let Some(sni_string) = get_sni_from_packet(&buf) {
-        let resolved_address: Result<std::net::IpAddr, io::Error> = resolve_addr(&sni_string).await;
-        if let Ok(ip) = resolved_address {
-            log::info!(
-                "HTTPS {} Choose AAAA record for {}: {}",
-                src_addr,
-                sni_string,
-                ip
-            );
 
-            let server: Result<TcpStream, io::Error> =
-                TcpStream::connect(format!("[{}]:{}", ip, port)).await;
-            if server.is_err() {
-                log::error!(
-                    "HTTPS {} Failed to connect to upstream: {}",
+    let mut fragment_buffer: [u8; 256] = [0; 256];
+    let mut fragments: Vec<u8> = vec![];
+
+    let mut sni_buffer: Vec<u8> = buf.to_vec();
+
+    loop {
+        if let Some(sni_string) = get_sni_from_packet(&sni_buffer) {
+            let resolved_address: Result<std::net::IpAddr, io::Error> =
+                resolve_addr(&sni_string).await;
+            if let Ok(ip) = resolved_address {
+                log::info!(
+                    "HTTPS {} Choose AAAA record for {}: {}",
                     src_addr,
-                    format!("{}:{}", ip, port)
+                    sni_string,
+                    ip
                 );
-                return None;
+
+                let server: Result<TcpStream, io::Error> =
+                    TcpStream::connect(format!("[{}]:{}", ip, port)).await;
+                if server.is_err() {
+                    log::error!(
+                        "HTTPS {} Failed to connect to upstream: {}",
+                        src_addr,
+                        format!("{}:{}", ip, port)
+                    );
+                    return None;
+                }
+
+                let server: TcpStream = server.ok()?;
+                let (mut eread, mut ewrite) = client.into_split();
+                let (mut oread, mut owrite) = server.into_split();
+                log::info!(
+                    "HTTPS {} Connected to upstream: {}",
+                    src_addr,
+                    format!("[{}]:{}", ip, port)
+                );
+                tokio::spawn(async move { io::copy(&mut eread, &mut owrite).await });
+                tokio::spawn(async move { io::copy(&mut oread, &mut ewrite).await });
+                return Some(());
+            } else {
+                log::error!(
+                    "HTTPS {} Failed to resolve AAAA record for {}: {}",
+                    src_addr,
+                    sni_string,
+                    resolved_address.err()?
+                );
+                break;
+            }
+        } else {
+            if fragments.len() > 4096 || (fragments.len() > 0 && fragment_buffer.len() == 0) {
+                log::error!("HTTPS {} No SNI", src_addr);
+                break;
             }
 
-            let server: TcpStream = server.ok()?;
-            let (mut eread, mut ewrite) = client.into_split();
-            let (mut oread, mut owrite) = server.into_split();
-            log::info!(
-                "HTTPS {} Connected to upstream: {}",
-                src_addr,
-                format!("[{}]:{}", ip, port)
-            );
-            tokio::spawn(async move { io::copy(&mut eread, &mut owrite).await });
-            tokio::spawn(async move { io::copy(&mut oread, &mut ewrite).await });
-            return Some(());
-        } else {
-            log::error!(
-                "HTTPS {} Failed to resolve AAAA record for {}: {}",
-                src_addr,
-                sni_string,
-                resolved_address.err()?
-            );
+            fragment_buffer = [0; 256];
+
+            client
+                .peek(&mut fragment_buffer)
+                .await
+                .expect("peek failed");
+            fragments = [fragments, fragment_buffer.to_vec()].concat();
+
+            sni_buffer = [&buf, fragments.as_slice()].concat();
+            continue;
         }
-    } else {
-        log::error!("HTTPS {} No SNI", src_addr);
     }
     None
 }
 
 pub async fn listener(port: u16) -> std::io::Result<()> {
-    let listener: TcpListener = TcpListener::bind(format!("{}:{}", get_bind_address(), port)).await?;
+    let listener: TcpListener =
+        TcpListener::bind(format!("{}:{}", get_bind_address(), port)).await?;
     log::info!("Listening on {}", listener.local_addr()?);
 
     loop {

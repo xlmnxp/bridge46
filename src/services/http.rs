@@ -15,8 +15,8 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
         .find(|line| line.to_lowercase().starts_with("host: "))
         .map(|line| String::from(line.to_lowercase().trim_start_matches("host: ").trim()));
 
-    let mut fragment_buffer = [0; 256];
-    let mut fragments: Vec<u8> = vec![];
+    let mut fragment_buffer: [u8; 256] = [0; 256];
+    let mut fragments: Vec<u8> = buf.to_vec();
 
     loop {
         if let Some(host_string) = host.clone() {
@@ -69,7 +69,7 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
                     .peek(&mut fragment_buffer)
                     .await
                     .expect("peek failed");
-                fragments = [buf, fragment_buffer].concat();
+                fragments = [fragments, fragment_buffer.to_vec()].concat();
                 request = String::from_utf8_lossy(fragments.as_slice());
 
                 host = request
@@ -81,6 +81,7 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
                 continue;
             }
         }
+        break;
     }
     None
 }
