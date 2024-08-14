@@ -1,50 +1,54 @@
-use tls_parser::{parse_tls_extensions, parse_tls_plaintext};
 use tokio::io;
+use rustls::server::{Accepted, Acceptor};
 use tokio::net::{TcpListener, TcpStream};
-
 use crate::utils::{get_bind_address, resolve_addr};
 
-pub fn get_sni_from_packet(packet: &[u8]) -> Option<String> {
-    let parse_tls_plaintext = parse_tls_plaintext(&packet);
-    if parse_tls_plaintext.is_err() {
-        log::error!("Error parsing TLS packet: {:?}", parse_tls_plaintext.err());
-        return None;
-    }
+pub async fn get_sni_from_packet(packet: Vec<u8>) -> Option<String> {
+    let mut acceptor: Acceptor = Acceptor::default();
+    let cursor: &mut dyn std::io::Read = &mut &packet[..];
 
-    let tls_message = &parse_tls_plaintext.ok()?.1.msg[0];
-    if let tls_parser::TlsMessage::Handshake(handshake) = tls_message {
-        if let tls_parser::TlsMessageHandshake::ClientHello(client_hello) = handshake {
-            let extensions: &[u8] = client_hello.ext?;
-            let parsed_extensions = parse_tls_extensions(extensions).ok()?;
-            for extension in parsed_extensions.1 {
-                if let tls_parser::TlsExtension::SNI(sni) = extension {
-                    return match String::from_utf8(sni[0].1.to_vec()) {
-                        Ok(sni) => Some(sni),
-                        Err(err) => {
-                            log::error!("Error parsing SNI: {:?}", err);
-                            None
-                        }
-                    };
-                }
+    match &acceptor.read_tls(cursor) {
+        Ok(size) => {
+            if *size == 0 {
+                log::error!("No data read from TLS packet");
+                return None;
             }
         }
+        Err(err) => {
+            log::error!("Error reading TLS packet: {:?}", err);
+            return None;
+        }
+    };
+
+    let accepted: Accepted = match acceptor.accept() {
+        Ok(Some(acceptor)) => acceptor,
+        Err(err) => {
+            log::error!("Error processing new packets: {:?}", err);
+            return None;
+        }
+        _ => {
+            log::error!("Packet not enough to process SNI (will increase buffer size by 256 bytes)");
+            return None;
+        }
+    };
+    return match accepted.client_hello().server_name() {
+        Some(sni) => Some(sni.to_string()),
+        None => {
+            log::error!("No SNI found in packet");
+            None
+        }
     }
-    None
 }
 
 pub async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
     let src_addr = client.peer_addr().ok()?;
 
-    let mut buf = [0; 256];
-    client.peek(&mut buf).await.expect("peek failed");
-
-    let mut fragment_buffer: [u8; 256] = [0; 256];
-    let mut fragments: Vec<u8> = vec![];
-
-    let mut sni_buffer: Vec<u8> = buf.to_vec();
+    let mut buf: Vec<u8> = vec![0; 256];
+    let mut last_buf_read_len = client.peek(&mut buf).await.expect("peek failed");
 
     loop {
-        if let Some(sni_string) = get_sni_from_packet(&sni_buffer) {
+        println!("buf length: {}", buf.len());
+        if let Some(sni_string) = get_sni_from_packet(buf.clone()).await {
             let resolved_address: Result<std::net::IpAddr, io::Error> =
                 resolve_addr(&sni_string).await;
             if let Ok(ip) = resolved_address {
@@ -87,20 +91,20 @@ pub async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
                 break;
             }
         } else {
-            if fragments.len() > 4096 || (fragments.len() > 0 && fragment_buffer.len() == 0) {
+            if buf.len() > 4096 || last_buf_read_len == 0 {
                 log::error!("HTTPS {} No SNI", src_addr);
                 break;
             }
 
-            fragment_buffer = [0; 256];
+            let buf_new_len = buf.len() + 256;
 
-            client
-                .peek(&mut fragment_buffer)
+            buf = vec![0; buf_new_len];
+            buf.resize(buf_new_len, 0);
+
+            last_buf_read_len = client
+                .peek(&mut buf[..buf_new_len])
                 .await
                 .expect("peek failed");
-            fragments = [fragments, fragment_buffer.to_vec()].concat();
-
-            sni_buffer = [&buf, fragments.as_slice()].concat();
             continue;
         }
     }

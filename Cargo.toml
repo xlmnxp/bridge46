@@ -5,12 +5,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tls-parser = "0.11.0"
 tokio = { version = "1.38", features = ["rt","net", "macros"] }
 hickory-client = "0.24.1"
 hickory-proto = "0.24.1"
 env_logger = "0.11.3"
 log = "0.4.22"
+rustls = "0.23.12"
 
 [profile.release]
 opt-level = 3

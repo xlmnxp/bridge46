@@ -7,16 +7,15 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
     let src_addr = client.peer_addr().ok()?;
 
     // read request header and get the host
-    let mut buf: [u8; 256] = [0; 256];
-    client.peek(&mut buf).await.expect("peek failed");
-    let mut request = String::from_utf8_lossy(&buf);
+    let mut buf: Vec<u8> = vec![0; 256];
+    let mut last_buf_read_len = client.peek(&mut buf).await.expect("peek failed");
+
+    let request_buf = buf.clone();
+    let mut request = String::from_utf8_lossy(&request_buf);
     let mut host: Option<String> = request
         .lines()
         .find(|line| line.to_lowercase().starts_with("host: "))
         .map(|line| String::from(line.to_lowercase().trim_start_matches("host: ").trim()));
-
-    let mut fragment_buffer: [u8; 256] = [0; 256];
-    let mut fragments: Vec<u8> = buf.to_vec();
 
     loop {
         if let Some(host_string) = host.clone() {
@@ -53,7 +52,7 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
                 tokio::spawn(async move { io::copy(&mut oread, &mut ewrite).await });
                 return Some(());
             } else {
-                if fragments.len() > 4096 || (fragments.len() > 0 && fragment_buffer.len() == 0) {
+                if buf.len() > 4096 || last_buf_read_len == 0 {
                     log::error!(
                         "HTTP {} Failed to resolve AAAA record for {}: {}",
                         src_addr,
@@ -63,14 +62,15 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
                     break;
                 }
 
-                fragment_buffer = [0; 256];
+                let buf_new_len = buf.len() + 256;
+                buf = vec![0; buf_new_len];
 
-                client
-                    .peek(&mut fragment_buffer)
+                last_buf_read_len = client
+                    .peek(&mut buf)
                     .await
                     .expect("peek failed");
-                fragments = [fragments, fragment_buffer.to_vec()].concat();
-                request = String::from_utf8_lossy(fragments.as_slice());
+
+                request = String::from_utf8_lossy(&buf);
 
                 host = request
                     .lines()
