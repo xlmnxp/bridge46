@@ -47,7 +47,6 @@ pub async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
     let mut last_buf_read_len = client.peek(&mut buf).await.expect("peek failed");
 
     loop {
-        println!("buf length: {}", buf.len());
         if let Some(sni_string) = get_sni_from_packet(buf.clone()).await {
             let resolved_address: Result<std::net::IpAddr, io::Error> =
                 resolve_addr(&sni_string).await;
