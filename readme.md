@@ -6,6 +6,7 @@ it's works by listen on IPv4 well known services and forward the traffic to IPv6
 - HTTP
 - HTTPS
 - Websocket (ws) and Secure Websocket (wss)
+- Minecraft (TCP)
 
 ## How to use
 ### Build from source
@@ -24,7 +25,7 @@ docker pull xlmnxp/bridge46:latest
 ```
 2. Run the image
 ```bash
-docker run -d -p 80:80 -p 443:443 --name bridge46 xlmnxp/bridge46:latest
+docker run -d -p 80:80 -p 443:443 -p 25565:25565 --name bridge46 xlmnxp/bridge46:latest
 ```
 
 Optionally you can pass the following environment variables to the container
