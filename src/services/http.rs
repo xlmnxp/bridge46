@@ -1,6 +1,4 @@
-use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
-
 use crate::utils::{get_bind_address, resolve_addr};
 
 async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
@@ -19,7 +17,7 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
 
     loop {
         if let Some(host_string) = host.clone() {
-            let resolved_address: Result<std::net::IpAddr, io::Error> =
+            let resolved_address: Result<std::net::IpAddr, tokio::io::Error> =
                 resolve_addr(&host_string).await;
             if let Ok(ip) = resolved_address {
                 log::info!(
@@ -29,7 +27,7 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
                     ip
                 );
 
-                let server: Result<TcpStream, io::Error> =
+                let server: Result<TcpStream, tokio::io::Error> =
                     TcpStream::connect(format!("[{}]:{}", ip, port)).await;
                 if server.is_err() {
                     log::error!(
@@ -48,8 +46,8 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
                     src_addr,
                     format!("[{}]:{}", ip, port)
                 );
-                tokio::spawn(async move { io::copy(&mut eread, &mut owrite).await });
-                tokio::spawn(async move { io::copy(&mut oread, &mut ewrite).await });
+                tokio::spawn(async move { tokio::io::copy(&mut eread, &mut owrite).await });
+                tokio::spawn(async move { tokio::io::copy(&mut oread, &mut ewrite).await });
                 return Some(());
             } else {
                 if buf.len() > 4096 || last_buf_read_len == 0 {
