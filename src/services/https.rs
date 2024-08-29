@@ -1,6 +1,6 @@
 use tokio::net::{TcpListener, TcpStream};
 use rustls::server::{Accepted, Acceptor};
-use crate::utils::{get_bind_address, resolve_addr};
+use crate::utils::{forward, get_bind_address, resolve_addr};
 
 pub async fn get_sni_from_packet(packet: Vec<u8>) -> Option<String> {
     let mut acceptor: Acceptor = Acceptor::default();
@@ -50,35 +50,16 @@ pub async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
             let resolved_address: Result<std::net::IpAddr, tokio::io::Error> =
                 resolve_addr(&sni_string).await;
             if let Ok(ip) = resolved_address {
+                let distance = format!("[{}]:{}", ip, port);
+
                 log::info!(
                     "HTTPS {} Choose AAAA record for {}: {}",
                     src_addr,
                     sni_string,
-                    ip
+                    distance
                 );
 
-                let server: Result<TcpStream, tokio::io::Error> =
-                    TcpStream::connect(format!("[{}]:{}", ip, port)).await;
-                if server.is_err() {
-                    log::error!(
-                        "HTTPS {} Failed to connect to upstream: {}",
-                        src_addr,
-                        format!("{}:{}", ip, port)
-                    );
-                    return None;
-                }
-
-                let server: TcpStream = server.ok()?;
-                let (mut eread, mut ewrite) = client.into_split();
-                let (mut oread, mut owrite) = server.into_split();
-                log::info!(
-                    "HTTPS {} Connected to upstream: {}",
-                    src_addr,
-                    format!("[{}]:{}", ip, port)
-                );
-                tokio::spawn(async move { tokio::io::copy(&mut eread, &mut owrite).await });
-                tokio::spawn(async move { tokio::io::copy(&mut oread, &mut ewrite).await });
-                return Some(());
+                return forward(client, distance).await
             } else {
                 log::error!(
                     "HTTPS {} Failed to resolve AAAA record for {}: {}",

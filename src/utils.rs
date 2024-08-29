@@ -10,7 +10,9 @@ use tokio::net::TcpStream;
 
 pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
     let (stream, sender) = TcpClientStream::<AsyncIoTokioAsStd<TcpStream>>::new(
-        get_dns_server().parse().expect("Invalid DNS server address"),
+        get_dns_server()
+            .parse()
+            .expect("Invalid DNS server address"),
     );
     let dns_client = AsyncClient::new(stream, sender, None);
     let (mut dns_client, bg) = dns_client.await.expect("dns connection failed");
@@ -37,9 +39,9 @@ pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
     let bridge_ipv6 = get_bridge46_ipv6();
     if bridge_ipv4 != "" || bridge_ipv6 != "" {
         let response_ipv4: DnsResponse = dns_client
-        .query(Name::from_str(addr)?, DNSClass::IN, RecordType::A)
-        .await
-        .expect("Failed to query");
+            .query(Name::from_str(addr)?, DNSClass::IN, RecordType::A)
+            .await
+            .expect("Failed to query");
 
         let answers_ipv4: &[Record] = response_ipv4.answers();
 
@@ -81,7 +83,10 @@ pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
         if let Some(RData::AAAA(ref ip)) = answer.data() {
             let bridge_ipv6 = get_bridge46_ipv6();
             if bridge_ipv6 != "" && ip.to_string() == bridge_ipv6 {
-                log::info!("DNS Resolver: {} requested IPv6 is same as Bridge46 service IPv6", addr);
+                log::info!(
+                    "DNS Resolver: {} requested IPv6 is same as Bridge46 service IPv6",
+                    addr
+                );
                 continue;
             }
 
@@ -101,6 +106,28 @@ pub async fn resolve_addr(addr: &str) -> std::io::Result<IpAddr> {
         std::io::ErrorKind::Other,
         "No AAAA records found",
     ))
+}
+
+pub async fn forward(source: TcpStream, distance: String) -> Option<()> {
+    let source_addr = source.peer_addr().ok()?;
+    let server: Result<TcpStream, tokio::io::Error> = TcpStream::connect(distance.clone()).await;
+    if server.is_err() {
+        log::error!(
+            "{} Failed to connect to upstream: {}",
+            source_addr,
+            distance
+        );
+        return None;
+    }
+
+    let server: TcpStream = server.ok()?;
+    let (mut eread, mut ewrite) = source.into_split();
+    let (mut oread, mut owrite) = server.into_split();
+    log::info!("{} Connected to upstream: {}", source_addr, distance);
+    tokio::spawn(async move { tokio::io::copy(&mut eread, &mut owrite).await });
+    tokio::spawn(async move { tokio::io::copy(&mut oread, &mut ewrite).await });
+
+    Some(())
 }
 
 pub fn get_dns_server() -> String {

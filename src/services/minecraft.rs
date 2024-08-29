@@ -1,5 +1,5 @@
 use tokio::net::{TcpListener, TcpStream};
-use crate::utils::{get_bind_address, resolve_addr};
+use crate::utils::{forward, get_bind_address, resolve_addr};
 
 struct MinecraftServer {
     hostname: String,
@@ -88,36 +88,19 @@ async fn handle_connection(client: TcpStream, _port: u16) -> Option<()> {
 
     let server_info = MinecraftServer::read_server_info(&buf).expect("Failed to read server info");
 
-    log::info!(
-        "Minecraft {} Trying connect to: {}",
-        src_addr,
-        server_info.hostname
-    );
-
     let ip = resolve_addr(&server_info.hostname).await.expect("Failed to resolve hostname");
-    let upstream = format!("{}:{}", ip, server_info.port);
-    let server: Result<TcpStream, tokio::io::Error> =
-        TcpStream::connect(upstream.clone()).await;
-    if server.is_err() {
-        log::error!(
-            "Minecraft {} Failed to connect to upstream: {}",
-            src_addr,
-            upstream
-        );
-        return None;
-    }
+    let distance = format!("[{}]:{}", ip, server_info.port);
 
-    let server: TcpStream = server.ok()?;
-    let (mut eread, mut ewrite) = client.into_split();
-    let (mut oread, mut owrite) = server.into_split();
     log::info!(
-        "Minecraft {} Connected to upstream: {}",
+        "Minecraft {} Choose AAAA record for {}: {}",
         src_addr,
-        upstream
+        server_info.hostname,
+        distance
     );
-    tokio::spawn(async move { tokio::io::copy(&mut eread, &mut owrite).await });
-    tokio::spawn(async move { tokio::io::copy(&mut oread, &mut ewrite).await });
-    None
+
+    let distance = format!("[{}]:{}", ip, server_info.port);
+
+    forward(client, distance).await
 }
 
 pub async fn listener(port: u16) -> std::io::Result<()> {
