@@ -135,7 +135,7 @@ pub fn get_dns_server() -> String {
 }
 
 pub fn get_bind_address() -> String {
-    std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "::".into())
+    std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "[::]".into())
 }
 
 pub fn get_bridge46_ipv4() -> String {
