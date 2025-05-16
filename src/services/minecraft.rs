@@ -9,6 +9,14 @@ struct MinecraftServer {
 
 impl MinecraftServer {
     fn read_server_info(packet: &[u8]) -> Result<MinecraftServer, std::io::Error> {
+        // Check if the packet is long enough
+        if packet.len() < 7 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Packet is too short",
+            ));
+        }
+
         // Read protocol version
         let protocol_version: i32 = Self::read_var_int(&packet[2..4])?;
 
