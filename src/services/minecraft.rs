@@ -9,21 +9,11 @@ struct MinecraftServer {
 
 impl MinecraftServer {
     fn read_server_info(packet: &[u8]) -> Result<MinecraftServer, std::io::Error> {
-        // Read packet ID
-        if packet[1] != 0x00 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Unexpected packet ID",
-            ));
-        }
-
         // Read protocol version
         let protocol_version: i32 = Self::read_var_int(&packet[2..4])?;
 
         // Read hostname length
         let hostname_length = packet[4];
-
-        println!("{:?}", hostname_length);
 
         // Read hostname
         let hostname =
@@ -42,8 +32,6 @@ impl MinecraftServer {
     fn read_var_int(mut packet: &[u8]) -> Result<i32, std::io::Error> {
         let mut result: i32 = 0;
         let mut position: i32 = 0;
-
-        println!("{:?}", packet);
 
         loop {
             if position > 35 {
