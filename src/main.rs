@@ -16,18 +16,18 @@ async fn main() -> std::io::Result<()> {
     let https_ports: vec::Vec<u16> = vec![443, 8443, 10443];
 
     for http_port in http_ports {
-        let listner = tokio::spawn(http::listener(http_port));
-        let _ = listner.await.expect("http listener failed");
+        tokio::spawn(http::listener(http_port));
     }
 
     for https_port in https_ports {
-        let listner = tokio::spawn(https::listener(https_port));
-        let _ = listner.await.expect("https listener failed");
+        tokio::spawn(https::listener(https_port));
     }
 
-    let minecraft_listener: tokio::task::JoinHandle<Result<(), std::io::Error>> = tokio::spawn(minecraft::listener(25565));
+    // Minecraft listener
+    tokio::spawn(minecraft::listener(25565));
 
-    let _ = minecraft_listener.await.expect("minecraft_listener failed");
-
-    Ok(())
+    // Wait forever
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+    }
 }
