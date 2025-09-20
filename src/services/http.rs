@@ -15,6 +15,13 @@ async fn handle_connection(client: TcpStream, port: u16) -> Option<()> {
         .find(|line| line.to_lowercase().starts_with("host: "))
         .map(|line| String::from(line.to_lowercase().trim_start_matches("host: ").trim()));
 
+    // remove port from host if present
+    if let Some(host_string) = host.clone() {
+        if let Some(colon_index) = host_string.find(':') {
+            host = Some(String::from(&host_string[..colon_index]));
+        }
+    }
+
     loop {
         if let Some(host_string) = host.clone() {
             let resolved_address: Result<std::net::IpAddr, tokio::io::Error> =
