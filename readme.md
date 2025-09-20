@@ -3,10 +3,10 @@ Bridge46 is simple bridge between IPv4 and IPv6
 it's works by listen on IPv4 well known services and forward the traffic to IPv6 services
 
 ## Supported services
-- HTTP
-- HTTPS
-- Websocket (ws) and Secure Websocket (wss)
-- Minecraft (TCP)
+- HTTP (80, 8080, 10000)
+- HTTPS (443, 8443, 10443)
+- Websocket (ws) and Secure Websocket (wss) over HTTP/HTTPS
+- Minecraft (TCP) (25565)
 
 ## How to use
 ### Build from source
@@ -25,7 +25,7 @@ docker pull xlmnxp/bridge46:latest
 ```
 2. Run the image
 ```bash
-docker run -d -p 80:80 -p 443:443 -p 25565:25565 --name bridge46 xlmnxp/bridge46:latest
+docker run -d -p 80:80 -p 8080:8080 -p 10000:10000 -p 443:443 -p 8443:8443 -p 10443:10443 -p 25565:25565 --name bridge46 xlmnxp/bridge46:latest
 ```
 
 Optionally you can pass the following environment variables to the container
