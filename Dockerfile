@@ -17,4 +17,4 @@ EXPOSE 80 443 25565
 ENV TERM=xterm-256color
 
 # Run the application
-CMD ["/app/target/release/bridge46"]
+ENTRYPOINT ["/app/target/release/bridge46"]
