@@ -1,7 +1,7 @@
 [package]
 name = "bridge46"
 authors = ["Salem Yaslem <s@sy.sa>"]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
@@ -11,6 +11,7 @@ hickory-proto = "0.24.1"
 env_logger = "0.11.3"
 log = "0.4.22"
 rustls = "0.23.12"
+clap = { version = "4.4", features = ["derive"] }
 
 [profile.release]
 opt-level = 3
